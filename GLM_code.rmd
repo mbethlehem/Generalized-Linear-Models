@@ -1,0 +1,1078 @@
+---
+title: "GLM Project"
+author: "Arielle Pierre, Ying Jin & Bethlehem Messelu"
+date: "24-01-2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(tidyr)
+library(rsample)
+library(MASS)
+library(car)
+library(skimr)
+library(GGally)
+library(broom)
+library(scales)
+library(glue)
+library(janitor)
+library(marginaleffects)
+library(tidyverse)
+library(qqplotr)
+library(ggfortify)
+library(plotly)
+```
+
+# Discussion de la question de recherche 
+
+## Les systèmes de vélos partagés : une solution urbaine
+
+Le projet de développement et de gestion des services de vélos partagés en milieu urbain soulève plusieurs enjeux pertinents et d’utilité publique, tant sur le plan environnemental, économique, que social. En effet, à l’heure où les grandes villes font face à des défis majeurs liés à la pollution de l'air, à la congestion urbaine, et à l’augmentation des coûts des transports, l’essor du vélo comme mode de transport alternatif apparaît comme une solution qui répond à ces problématiques.
+
+D'abord, le recours au vélo participe à la réduction des gaz à effet de serre. Les villes sont des lieux où les émissions de CO2 liées aux véhicules polluants sont particulièrement élevées. Promouvoir l’utilisation des vélos permet de réduire ces émissions, contribuant ainsi à la lutte contre le changement climatique. En réduisant le nombre de voitures en circulation, on améliore également la qualité de l’air, un enjeu crucial pour la santé publique, notamment dans les zones urbaines densément peuplées.
+
+Les vélos en libre-service peuvent être utilisés pour effectuer des trajets courts, en remplacement des déplacements en voiture. À titre d'exemple, un quart des automobilistes en ville parcourt des distances inférieures à un kilomètre, souvent à une vitesse inférieure à 20 km/h, selon une étude menée par CERTU (Centre d'Études sur les Réseaux, les Transports et l'Urbanisme). Ces trajets peuvent être facilement effectués à vélo, permettant ainsi de désengorger les routes et de libérer de l’espace public pour d’autres usages. Cette gestion efficace du transport urbain est d’autant plus nécessaire dans un contexte de saturation des transports en commun.
+Le vélo, en tant que mode de transport, présente également des avantages évidents sur le plan de la santé. L'augmentation de l'activité physique est essentielle dans un monde de plus en plus sédentaire. Le vélo permettrait alors une activité physique régulière et  réponderait à la problématique de la sédentarité. 
+
+Enfin, la complémentarité avec les transports en commun est un autre argument majeur pour la 
+pertinence du projet. Le vélo peut être utilisé pour combler les zones non desservies par les transports publics, ou pour effectuer des trajets intermédiaires entre la maison et la station de métro ou de bus. Cela allège la pression sur les lignes de transport en commun, souvent surchargées, et améliore ainsi l’efficience du système de transport global.
+
+Pour conclure, la mise en place d'un système de vélos partagés est une initiative à la fois pertinente et d’utilité publique. Elle répond aux enjeux environnementaux de la transition énergétique, contribue à la fluidité des déplacements urbains, améliore la qualité de vie des citadins et participe à une meilleure gestion de l’espace et des ressources en ville. C'est une solution qui allie développement durable, santé publique et efficacité des transports, en phase avec les besoins croissants des sociétés urbaines modernes.
+
+## Présentation des données
+```{r,echo=F}
+data <- read.csv("./projet.csv", header = TRUE, sep = ",")
+head(data, n = 10) |> knitr::kable(caption = "Extrait des données")
+```
+
+## Description des variables 
+
+La gestion des stocks de vélos en libre-service dépend de plusieurs facteurs, et l'objectif de notre projet est de déterminer le meilleur modèle pour prédire le nombre de vélos loués en fonction de ces facteurs. Nous utiliserons des données historiques sur une année du système de partage de vélos d’une ville, agrégées par jour. Chaque observation représente une période de la journée pendant laquelle le nombre de vélos loués a été comptabilisé. Le nombre total d'observations est de `r dim(data)[1]` et le nombre de variables est  `r dim(data)[2]`.
+
+Ce jeu de données comprend plusieurs variables qui peuvent être utiles pour prédire le nombre de vélos empruntés. Les variables *saison* (Hiver, Printemps, Été, Automne) et *mois* (de janvier à décembre) nous aident à capturer la dimension temporelle des emprunts. Il est raisonnable de penser que le nombre de vélos loués sera plus élevé durant les saisons printanières et estivales, comme d'avril à août, car le temps est plus agréable pour faire du vélo.
+
+Les *jour_mois* et les *jour_semaine* (dimanche à samedi) nous permettent d'affiner l’analyse des tendances quotidiennes et hebdomadaires. Par exemple, il est probable que les week-ends, lorsque les gens ont plus de temps libre, soient plus propices à l'emprunt de vélos pour des balades, contrairement aux jours de semaine où les contraintes de travail limitent ce genre d'activité.
+
+La variable *horaire* segmente la journée en périodes spécifiques, telles que 24h-7h, 7h-11h, 11h-15h, 15h-19h, et 19h-24h. Il est possible que les créneaux horaires de 7h-11h et 15h-19h, qui correspondent aux heures de pointe, voient davantage de locations, car les gens peuvent les utiliser pour leurs trajets quotidiens.
+
+De plus, la variable *jour_travail* distingue les jours de travail des jours non travaillés, tandis que la variable *vacances* indique si l’on est un jour de vacances. Il est possible que le nombre de vélos loués augmente lors des jours de vacances, car les gens peuvent avoir plus de temps pour se balader.
+
+Les conditions météorologiques jouent aussi un rôle important dans la location des vélos. Les variables *meteo* (Claire, Nuageux/Brumeux, Pluie/Neige), *humidite* (Pourcentage d'humidité), *vent* (Vitesse du vent en Km/h), et les températures (*temperature1* et *temperature2*) influencent certainement la décision d'emprunter un vélo. Par exemple, de belles journées ensoleillées ou avec une température agréable peuvent encourager plus de personnes à utiliser le vélo, contrairement à des journées pluvieuses ou très froides.
+
+Enfin, la variable *velos* représente le nombre de vélos empruntés, c'est la variable que nous cherchons à prédire en fonction de toutes les autres.
+
+## Data Cleaning
+
+```{r, echo = FALSE}
+data$saison <- factor(data$saison, 
+                      levels = c(1, 2, 3, 4), 
+                      labels = c("Hiver", "Printemps", "Été", "Automne"))
+
+data$mois <- factor(data$mois, 
+                    levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), 
+                    labels = c("Janvier", "Février", "Mars", "Avril", "Mai", 
+                               "Juin", "Juillet", "Août", "Septembre", "Octobre",
+                               "Novembre", "Décembre"))
+
+
+data$jour_semaine <- factor(data$jour_semaine, 
+                            levels = c(1, 2, 3, 4, 5, 6, 7),
+                            labels = c("Dimanche", "Lundi", "Mardi", 
+                                       "Mercredi", "Jeudi", "Vendredi", "Samedi"))
+data$horaire <- factor(data$horaire, 
+                       levels = c(1, 2, 3, 4, 5),
+                       labels = c("24h-07h", "07h-11h", 
+                                  "11h-15h", "15h-19h", "19h-24h"))
+
+data$jour_travail <- factor(data$jour_travail, 
+                            levels = c(1, 2), 
+                            labels = c("Non", "Oui"))
+
+data$vacances <- factor(data$vacances, 
+                        levels = c(1, 2), 
+                        labels = c("Non", "Oui"))
+
+data$meteo <- factor(data$meteo, 
+                     levels = c(1, 2, 3), 
+                     labels = c("Claire", "Nuageux/Brumeux", "Pluie/Neige"))
+
+data$jour_mois <- factor(data$jour_mois, 
+                    levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31), 
+                    labels = c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31"))
+
+
+data <- data |> mutate(across(where(is.character), as.numeric))
+data <- data |> mutate(across(where(is.integer), as.numeric)) 
+data <- data[, !names(data) %in% "obs"]
+```
+
+```{r, echo=F}
+summary(data)
+```
+# Examen des variables et Selection des variables à garder
+
+## Valeurs manquantes
+```{r, echo=F}
+#nombre de valeurs manquantes par variables
+print(colSums(is.na(data)))
+```
+Il n'y a aucune valeur manquante.
+
+## Distribution de chaque variable
+
+Nous avons réalisé un histogramme pour les valeurs numériques afin d’avoir une idée générale de leur distribution respective.
+
+### Distribution des variables numériques
+
+```{r, echo=F}
+
+var_num <- select_if (data, is.numeric)
+
+numeric_vars <- data %>% select_if(is.numeric)  # Sélection des variables numériques
+numeric_vars_long <- pivot_longer(numeric_vars, cols = everything())  # Transformation pour ggplot
+
+ggplot(numeric_vars_long, aes(x = value)) +
+  geom_histogram(fill = "blue", color = "black", bins = 30) +
+  facet_wrap(~ name, scales = "free") +
+  labs(title = "Distribution des variables numériques", x = "Valeurs", y = "Effectif") +
+  theme_minimal()
+
+```
+
+On remarque que les variables *velos* et *vent* ont des distributions avec des asymétries positives (car ont des queues à droite), tandis que la variable *humidite* a une légère asymétrie négative (car a une queue à gauche). Les variables *temperature1* et *temperature2* ont une distribution en forme de cloche.
+
+Nous avons également calculé les statistiques principales des variables de notre jeu de données afin d’avoir une idée plus fine de la distribution de nos variables.
+
+```{r, echo=F}
+data |> summarize("Min" = round(min(vent), 2), "Q_25" = round(quantile(vent, 0.25), 2), "Median" = round(median(vent), 2),"Q_75" = round(quantile(vent, 0.75), 2),"Mean" = round(mean(vent), 2), "Sd" = round(sd(vent), 2), "Max" = round(max(vent), 2)) |> knitr::kable(caption = "Statistiques Vent")
+```
+
+La vitesse moyenne du vent dans notre échantillon est de 21.23. On observe que cette variable a un écart -type de 11.62. La variable *vent* a une étendue de 68.66, cependant 75% des observations est en dessous de la valeur 28.28, ce qui se traduit par une asymétrie positive graphiquement.
+
+```{r, echo=F}
+data |> summarize("Min" = round(min(temperature2), 2), "Q_25" = round(quantile(temperature2, 0.25), 2), "Median" = round(median(temperature2), 2), "Q_75" = round(quantile(temperature2, 0.75), 2), "Mean" = round(mean(temperature2), 2), "Sd" = round(sd(temperature2), 2), "Max" = round(max(temperature2), 2)) |> knitr::kable(caption = "Statistiques Température")
+```
+
+La température2 mesurée moyenne de nos observations sont de  15.24. On observe que cette variable a un écart -type de 9.35. La variable *température2* a une étendue de 43.24.
+
+```{r, echo=F}
+data |> summarize("Min" = round(min(humidite), 2), "Q_25" = round(quantile(humidite, 0.25), 2), "Median" = round(median(humidite), 2), "Q_75" = round(quantile(humidite, 0.75), 2), "Mean" = round(mean(humidite), 2), "Sd" = round(sd(humidite), 2), "Max" = round(max(humidite), 2)) |> knitr::kable(caption = "Statistiques Humidité")
+
+```
+
+La proportion d’humidité moyenne de nos observations sont de  62.94 %. On observe que cette variable a un écart-type de 19.01. La variable *humidite* a une étendue de 100.
+
+Nous avons réalisé un histogramme pour notre variable d’intérêt, le nombre de locations de vélos. Le nombre moyen de vélos loués est de 684.15. Notre variable a une large étendue comparativement aux autres variables de nos données, 2029. On remarque que le troisième quartile (1041) est nettement éloigné de la valeur maximale (2036), ce qui indique une concentration des données dans la partie inférieure de la distribution. Cette répartition, visible sur l'histogramme ci-dessous, traduit une asymétrie à droite, avec une queue étirée vers les valeurs élevées.
+
+De plus, on observe que la variance de la variable *velos* est beaucoup plus élevé que sa moyenne (210844.3	contre 684.15).
+
+```{r, echo=F}
+data |>  summarize("Min" = round(min(velos), 2), "Q_25" = round(quantile(velos, 0.25), 2), "Median" = round(median(velos), 2), "Q_75" = round(quantile(velos, 0.75), 2), "Mean" = round(mean(velos), 2), "Sd" = round(sd(velos), 2), "Var" = round(var(velos), 2), "Max" = round(max(velos), 2)) |> knitr::kable(caption = "Statistiques Velos")
+```
+```{r, echo=F}
+data |> ggplot(aes(x = velos)) + geom_histogram(bins = 30, fill = "darkgreen", color = "black", boundary = 0) + labs(title = "Distribution du nombre de vélos", x = "Nombre de vélos", y = "Effectifs") + theme_minimal() + scale_x_continuous(n.breaks = 10, expand = c(0, 0)) + scale_y_continuous(labels = scales::comma, expand = c(0, 0))
+```
+
+### Distribution des variables catégorielles
+
+```{r, echo=F}
+data |> count(mois) |> knitr::kable(caption= "Répartition des mois")
+```
+
+La répartition des mois est globalement équilibrée, avec un nombre d’observations variant entre 140 et 155 selon les mois.
+
+```{r, echo=F}
+data |> count(jour_travail) |> knitr::kable(caption= "Répartition des jours de travail")
+```
+
+La répartition des jours de travail montre que les jours travaillés (n = 1244) sont environ deux fois plus nombreux que les jours non travaillés (n = 573), reflétant une prédominance des jours ouvrables dans les données.
+
+```{r, echo=F}
+data |> count(horaire) |> knitr::kable(caption= "Répartition des horaires")
+```
+
+La répartition des horaires est presque uniforme, avec un nombre d'observations variant légèrement entre 362 et 365 pour chaque plage horaire, ce qui reflète une couverture équilibrée des différentes périodes de la journée.
+
+```{r, warning= F, echo=F}
+ggplot(data, aes(x =meteo)) + geom_bar(aes(y = ..count.. / sum(..count..)),  color="blue", fill= "#77B5FE") + labs(title = "Barplot des proportions", y = "Proportion") + theme_minimal()
+```
+
+La boite à moustache montre que la majorité des observations correspondent à des journées claires, représentant plus de 60 % des cas. Les journées nuageuses ou brumeuses représentent environ 25% tandis que les journées de pluie ou de neige sont nettement moins fréquentes, avec une proportion bien plus faible.
+
+## Transformation des variables 
+
+On remarque que les variables humidite, temperature1 et temperature2 semblent suivre une distribution normale. On a décidé de centrer les variables temperature2 (elle est choisi apres analyse) et vent pour une meilleure interprétation.
+
+La variable velos est à valeurs dans $\mathbb{N}$. De plus, la variance de velos est supérieure à sa moyenne et la distribution semble correspondre à une binomiale négative, d'ou le choix d'un modèle de regression binomiale négative. 
+
+Après une transformation racine carré de la variable velos, la distribution s'approche d'une loi normale. On pourrait donc créer un modèle de régression linéaire. 
+
+
+```{r, echo=F}
+data <- mutate(data, racine_velo=sqrt(velos))
+
+data |>
+pivot_longer(c(velos, racine_velo), names_to = "variable", values_to = "value") |>
+mutate(variable = factor(variable, levels = c("velos", "racine_velo"),
+labels = c("Velos", "racine_velo"))) |>
+ggplot(aes(x = value)) +
+facet_wrap(vars(variable), scales = "free") +
+geom_histogram(fill = "blue", color = "black", bins = 25) +
+scale_y_continuous(expand = expansion(c(0, 0.05))) +
+scale_x_continuous(breaks = pretty_breaks()) +
+labs(x = "Valeur", y = "Effectif") +
+theme_bw(base_size = 14) +
+theme(strip.text = element_text(size = 11,face="bold"))
+```
+
+
+## Corrélation entre les variables
+
+### Variables quantitatives
+
+Nous avons calculé la matrice de corrélation des variables numériques de notre ensemble de données. 
+
+```{r, echo=F}
+correlation_matrix<-cor(data |> dplyr::select(where(is.numeric)))
+corrplot(correlation_matrix, order="hclust", addrect=3)
+```
+
+On remarque que les variables *temperature1 * et *temperature2* sont fortement corrélées. Une corrélation élevée entre deux variables peut entraîner un problème de colinéarité dans le modèle de régression, ce qui rend difficile l’interprétation des coefficients et diminue la précision des estimations.
+
+Pour décider quelle variable de température supprimer, nous avons construit un modèle linéaire en utilisant uniquement les variables quantitatives pour simplifier. 
+ 
+```{r, echo=F}
+model <- lm(velos ~ temperature1 + temperature2 + humidite + vent, data = data)
+summary(model)
+```
+Nous avons constaté que la variable *temperature1* présente une p-valeur élevée(0.3627), ce qui indique qu’elle n’est pas statistiquement significative pour expliquer la variation de la variable dépendante (*velos*). Ainsi, il est raisonnable de supprimer *temperature1* du modèle, tout en conservant *temperature2*, qui semble être une meilleure représentante de l’effet de la température dans l’analyse. 
+
+
+### Variables Catégorielles
+
+On peut établir des tables de contingence entre des variables catégorielles afin d'analyser leur relation. Pour tester si ces variables sont indépendantes, on utilise le test du $\chi^2$. Pour ce test, l'hypothèse nulle (\(H_0\)) est que les deux variables sont indépendantes, tandis que l'hypothèse alternative (\(H_1\)) affirme qu'il existe une dépendance entre ces deux variables.
+
+
+```{r, echo=F, warning=F}
+qual_vars <- data %>% select_if(is.factor)
+
+# Loop through pairs of variables to compute Chi-square test
+for (i in 1:(ncol(qual_vars) - 1)) {
+  for (j in (i + 1):ncol(qual_vars)) {
+    var1 <- colnames(qual_vars)[i]
+    var2 <- colnames(qual_vars)[j]
+    
+    table_pair <- table(qual_vars[[var1]], qual_vars[[var2]])
+    
+    test <- chisq.test(table_pair)
+    
+    cat(paste("Association between", var1, "and", var2, ":\n"))
+    cat(paste("Chi-square p-value:", test$p.value, "\n\n"))
+  }
+}
+```
+Si la p-valeur est extrêmement petite (proche de 0), cela indique une forte association entre deux variables qualitatives étroitement liées et probablement redondantes. Dans ce cas, il est judicieux de ne conserver qu'une seule des deux variables pour éviter la colinéarité dans le modèle. Cependant, malgré leur corrélation élevée, il n’est pas toujours approprié de supprimer directement l’une des variables. Il est essentiel de considérer la nature des données et leur rôle dans l’analyse avant de prendre une décision.
+
+D’après les résultats, nous constatons que les p-valeurs associées aux paires de variables suivantes sont très faibles, suggérant une forte interdépendance et une possible: 
+
+- *saison* et *mois*,
+- *saison* et *meteo*,
+- *mois* et *meteo*,
+- *jour_mois* et *jour_semaine*,
+- *jour_mois* et *vacances*,
+- *jour_semaine* et *jour_travail*,
+- *jour_semaine* et *vacances*,
+- *jour_semaine* et *meteo*,
+- *horaire* et *meteo*,
+- *jour_travail* et *vacances*.
+
+
+Par bon sens, nous savons que les informations contenues dans *saison* sont déjà incluses dans *mois*. De la même manière, les informations de *jour_semaine*, *jour_mois* et *vacances* sont en grande partie reflétées dans *jour_travail* par le résultat du code ci-dessous.
+
+```{r, echo=F}
+data <- data |> mutate(test = ifelse(jour_semaine %in% c("Dimanche", "Samedi")  | vacances == "Oui", 0, 1))
+data |> count(jour_travail, test) |> knitr::kable(caption= "Construction de la variable jour_travail")
+```
+
+On constate que la variable *jour_travail* vaut "Non" si on est un samedi ou un dimanche ou si c'est un jour de vacances scolaire. Elle vaut "Oui" dans le cas contraire. Donc les variables *vacances* et *jour_semaine* sont inutiles dans l'analyse, car sont déjà contenues dans la variable *jour_travail*.
+
+Ainsi, pour simplifier le modèle tout en minimisant la redondance, nous pouvons raisonnablement supprimer les variables *saison*, *jour_mois* et *jour_semaine* du jeu de données.
+
+### Variables numériques et catégorielles:
+
+On étudie maintenant la correlation entre les variables qualitatives et quantitatives.
+
+#### Corrélation entre Météo et Humidité: 
+```{r, warning = FALSE, echo=F}
+ggplot(data, aes(x = meteo, y = humidite, color = meteo)) +
+  geom_boxplot() +
+  stat_summary(fun = mean, shape = 5, size = 1, colour = "black")+ labs(title = "Boxplot de l'humidité par groupe de météo", x = "Groupe de météo", y = "Humidité")+ theme_minimal()
+```
+
+Le boxplot ci-dessus présente la distribution de l'humidité en fonction des différents groupes de météo. On remarque que les variables *humidite* et *meteo* sont tres correlées. Par bon sens, on sait que les jours de pluie ou de neige sont généralement plus humides que les jours clairs ou nuageux. On peut donc supprimer la variable *humidite*. 
+
+#### Corrélation entre Météo et Vent: 
+
+```{r, warning = FALSE, echo=F}
+ggplot(data, aes(x = meteo, y = vent, color= meteo)) +
+  geom_boxplot() +
+   stat_summary(fun = mean, shape = 5, size = 1, colour = "black") + labs(title = "Boxplot du vent par groupe de météo",
+  x = "Groupe de météo", y = "Vent") +
+  theme_minimal()
+```
+
+Le boxplot ci-dessus montre la distribution du vent selon les différents groupes de météo. Nous oberservons que les variables *meteo* et *vent* sont faiblement corrélées.
+
+#### Corrélation entre Météo et Température:  
+
+```{r, warning = FALSE, echo=F}
+ggplot(data, aes(x = meteo, y = temperature2, color = meteo)) +
+  geom_boxplot() +
+   stat_summary(fun = mean, shape = 5, size = 1, colour = "black") +
+  labs(title = "Boxplot de la température2 par groupe de météo",
+  x = "Groupe de météo", y = "Température2") +
+  theme_minimal()
+```
+
+Le boxplot ci-dessus montre la distribution du vent selon les différents groupes de météo. La dispérsion de la température 2 n'est pas la même en fonction du groupe de météo mais la médiane n'est pas tellement différente.
+
+D'après nos analyses, les variables conservées sont les suivantes: *velos*, *mois*, *vent*, *temperature2*, *horaire* et *jour_travail*.
+
+
+
+# Association entre le nombre de velos et les variables 
+
+### Vélos loués et les variables numériques
+
+```{r, warning=FALSE, message = FALSE, echo=F}
+ggplot(data, aes(x = temperature2, y = racine_velo)) + geom_point(color = "red", size = 0.5) + labs(title = "Relation entre Racine(Vélos) et Température2", x = "Température 2", y = "Racine(Vélos)") + geom_smooth(method="lm") 
+```
+
+
+Ce graphique montre la relation positive entre la racine carrée du nombre de vélos loués et la variable *temperature2*.
+
+```{r,warning=FALSE, message = FALSE, echo=F}
+ggplot(data, aes(x = vent, y = racine_velo)) +
+    geom_point(color = "blue", size = 0.5) +  labs(title = "Relation entre Racine(Vélos) et Vent", x = "Vent", y = "Racine(Vélos)") + geom_smooth(method="lm")
+    
+```
+
+Ce graphique illustre la relation entre la racine carrée du nombre de vélos loués et la variable *vent*.
+
+### Vélos et mois 
+
+```{r,warning=FALSE, echo=F}
+ggplot(data, aes(x = mois, y = velos, fill = factor(mois))) +
+  geom_boxplot() +
+  stat_summary(fun=mean, colour="black", geom="point",shape=18, size=3)+
+  labs(title = "Distribution des locations de vélos selon le mois",
+       x = "Mois",
+       y = "Nombre de vélos") +
+  theme_minimal() +
+  scale_fill_manual(values = c(#1f77b4",  # Bleu
+  "#ff7f0e",  # Orange
+  "#2ca02c",  # Vert
+  "#d62728",  # Rouge
+  "#9467bd",  # Violet
+  "#8c564b",  # Marron
+  "#e377c2",  # Rose
+  "#7f7f7f",  # Gris
+  "#bcbd22",  # Vert olive
+  "#17becf",  # Cyan
+  "#fdae61",  # Orange clair
+  "#a6cee3",   # Bleu clair
+  "yellow"
+))  # Couleurs personnalisées
+
+```
+
+En Hiver(Décembre, Janvier, Février  et Mars), le nombre de locations de vélos est plus faible du aux conditions météorologiques déplorables (froid et neige). 
+On observe une tendence saisonnière avec une augmentation du nombre de locations de vélos à partir du mois d'avril (printemps) et un pic en été (juin, juillet, aout) car il fait plus chaud et c'est la saison des vacances. donc la demande est plus élevée.
+
+### Vélos et Jour de travail
+
+```{r, echo=F}
+data |>
+group_by(jour_travail) |>
+summarize("Effectif" = n(), "Mean" = mean(velos), "sd" = sd(velos)) |> knitr::kable(caption = "Stastiques de vélos selon la variable Jour_travail")
+```
+
+Pour les jours de non travail, en moyenne, 675 velos sont loués contre 688 pour les jour de travail. La différence entre les deux (688-675=13) est faible, ce qui suggère que le nombre moyen de location de vélos ne varie pas beaucoup entre un jour de travail et un jour on ne travaille pas.
+ 
+L’écart-type est légèrement plus faible en jours de travail (444.06), ce qui signifie que les locations sont un peu plus régulières en semaine par rapport aux jours non travaillés où la variabilité est plus forte.
+
+
+
+### Vélos et Horaire 
+
+```{r, echo=F}
+data |> group_by(horaire) |> summarize(mean_velos = mean(velos, na.rm = TRUE)) |> ggplot(aes(x = horaire, y = mean_velos)) + geom_col(fill="blue") + labs(title = "Distribution des locations de vélos selon l'horaire", x = "Horaire", y = "Nombre de vélos") 
+```
+
+Entre 15h et 19h, on observe une augmentation du nombre de vélos loués.  Beaucoup de travailleurs quittent leur bureau entre 17h et 19h. De meme les étudiants et lycéens finissent leurs cours en fin d'après midi. Les activités de loisir ou des déplacements personnels se font en fin de journée, ce qui favorise une hausse de vélos loués. 
+Le nombre de vélos loués est plus faible entre 24h-07h car les activités n'ont pas encore repris.
+
+### Vélos et Météo
+```{r, echo=F}
+ggplot(data, aes(x = meteo, y = velos, fill=meteo)) +
+  geom_boxplot() +
+  stat_summary(fun=mean, color="black", geom="point",shape=18, size=3)+ labs(title = "Distribution des locations de vélos selon la météo", x = "Météo", y = "Nombre de vélos") +
+  theme_minimal() + scale_fill_manual(values = c("skyblue", "gray", "darkred"))
+```
+
+La météo influence fortement le nombre de locations de vélos. Le temps clair est le plus favorable, tandis que le mauvais temps (pluie ou neige) réduit considérablement l'usage de vélos.
+ 
+# Représentation des interactions:
+```{r, echo=F}
+data_final <- data |> dplyr::select(mois, vent, meteo, temperature2, horaire, jour_travail, velos)
+```
+
+
+### Jour de travail * Horaire:
+
+Cet histogramme représente la proportion de vélos empruntés en fonction des horaires de la journée et selon qu’il s’agit d’un jour de travail ou non. On observe que la répartition des vélos empruntés par tranche horaire diffère en fonction de ce critère. Notamment, pour la tranche horaire de 7h à 11h, il y a une proportion beaucoup plus importante de vélos empruntés lors des jours de travail. En revanche, pour la tranche horaire de 11h à 15h, la proportion de vélos empruntés est nettement plus élevée les jours sans travail. Cela peut s’expliquer par le fait que la tranche horaire de 7h à 11h inclut les heures de pointe, période durant laquelle la plupart des personnes se rendent au travail. À l’inverse, la tranche horaire de 11h à 15h correspond à une période creuse, ce qui pourrait favoriser les emprunts de vélos pendant les jours de repos plutôt que lors des jours de travail. Ainsi, nous pouvons conclure qu’il serait pertinent d’ajouter cette interaction dans notre modèle.
+
+
+```{r, echo=F, message=F}
+data_final |> group_by(jour_travail, horaire)  |> summarize(total_velos = sum(velos))  |> group_by(jour_travail)  |> mutate(proportion = total_velos / sum(total_velos))  |>  ungroup() |> ggplot(aes(x = horaire, y = proportion, fill = jour_travail)) + geom_bar(stat = "identity", position = "dodge") + scale_y_continuous(labels = scales::percent) + labs(title = "Proportion de vélos empruntés selon l'horaire et les jours de travail", x = "Horaire", y = "Proportion de vélos empruntés", fill = "Jour de travail") + theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+### Météo * Température
+
+On considère ici une interaction entre la météo et la température, en supposant qu'une journée ensoleillée inciterait les gens à utiliser des vélos, tandis qu'une journée brumeuse ou nuageuse, même avec la même température, pourrait les décourager. Cependant, le graphique présenté montre l'impact de la température sur le nombre de vélos empruntés, en fonction de la météo. De plus, la répartition inégale des observations entre les différentes conditions météorologiques limite la capacité à observer une telle interaction. On n’observe pas d’impact différent sur le nombre de vélos empruntés en fonction de la météo. Ainsi, une interaction entre la météo et la température ne semble pas pertinente.
+
+```{r, warning=FALSE, message = FALSE, echo=F}
+ggplot(data_final, aes(x = temperature2, y = velos, color = factor(meteo))) + geom_point(size = 2, alpha = 0.6, position = position_jitter(width = 0.5, height = 0)) + geom_smooth(method = "loess", se = FALSE) + labs(title = "Nombre de vélos en fonction de la météo", x = "Température", y = "Nombre de vélos", color = "Météo") + theme_minimal() + theme(plot.title = element_text(hjust = 0.5), legend.position = "top") + facet_wrap(~ meteo)
+```
+
+### Météo * Jour de travail 
+
+Au départ, nous avons envisagé que l'impact de la météo sur l'utilisation des vélos pourrait être moins prononcé les jours de travail, car les usagers ont un impératif de se rendre à leur lieu de travail. Cependant, après avoir examiné le graphique montrant la proportion de vélos empruntés en fonction des jours de travail et des conditions météorologiques, nous n'observons pas de différence significative entre les jours de travail et les jours sans travail. Ainsi, une interaction entre les deux variables ne semble pas pertinente.
+
+```{r, echo=F, message=F}
+data_final |> 
+  group_by(jour_travail, meteo)  |> 
+  summarize(total_velos = sum(velos))  |> 
+  group_by(jour_travail)  |> 
+  mutate(proportion = total_velos / sum(total_velos))  |> 
+  ggplot(aes(x = meteo, y = proportion, fill = jour_travail)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = " Interaction entre jours de travail meteo", x = "Conditions météorologiques", y = "Proportion de vélos empruntés",
+    fill = "Jour de travail") + theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Horaire * Température
+
+Au départ, nous avons envisagé une interaction entre l'horaire et la température, en supposant que l'impact de la température sur l'utilisation des vélos pourrait être moins prononcé pendant les heures de pointe, car les usagers ont un impératif de se rendre à leur lieu de travail. On a illustré avec ce graphique l’impact de la température sur le nombre de vélos empruntés selon la tranche horaire journalière. On remarque que la relation entre ces deux variables n’est pas la même selon les horaires de la journée. Donc il serait pertinent d’ajouter cette interaction dans notre modèle.
+
+```{r, warning=FALSE, message = FALSE, echo=F}
+ggplot(data_final, aes(x = temperature2, y = velos, color = factor(horaire))) + geom_point(size = 2, alpha = 0.6, position = position_jitter(width = 0.5, height = 0)) + geom_smooth(method = "loess", se = FALSE) + labs(title = "Nombre de vélos en fonction de l'horaire", x = "Température", y = "Nombre de vélos", color = "Jour de travail") + theme_minimal() + theme(plot.title = element_text(hjust = 0.5), legend.position = "top") + facet_wrap(~ horaire)
+```
+
+### Température * Jour de travail 
+
+On considère l’interaction entre la variable température et jour de travail pour des raisons similaires que celles pour lesquelles on a croisé les variables météo et jours de travail. Ce graphique représente l’impact de la température sur le nombre de vélos empruntés selon s’il s’agit d’un jour de travail ou non. On voit que l’impact de la température sur le nombre de vélos empruntés ne varie pas selon s’il s’agit d’un jour de travail ou pas.
+
+```{r,warning=FALSE, message = FALSE, echo=F}
+ggplot(data_final, aes(x = temperature2, y = velos, color = factor(jour_travail))) + geom_point(size = 2, alpha = 0.6, position = position_jitter(width = 0.5, height = 0)) + geom_smooth(method = "loess", se = FALSE) + labs(title = "Nombre de vélos en fonction de jour de travail", x = "Température", y = "Nombre de vélos", color = "Jour de travail") + theme_minimal() + theme(plot.title = element_text(hjust = 0.5), legend.position = "top") + facet_wrap(~ jour_travail)
+```
+
+# Modélisation 
+
+Nous avons donc décidé de créer ces deux modèles: Modèle de regression (GLM) et Modèle linéaire et de comparer leur capacité prédictive.  
+
+On transforme d'abord les variables de nos données pour les 2 modèles.
+```{r, echo=F}
+#centrage des variables vent et temeperature2
+data_final <- mutate(data_final, centre_vent=vent-mean(vent))
+data_final <- mutate(data_final, centre_temperature2=temperature2-mean(temperature2))
+data_final <- data_final |> dplyr::select(-temperature2, -vent)
+```
+
+```{r, echo=F}
+set.seed(123)
+split_glm <- rsample::initial_split(data_final, prop=0.8)
+train_glm <- rsample::training(split_glm)
+test_glm  <- rsample::testing(split_glm)
+```
+
+## Modèle de regression (GLM)
+
+Nous avons donc décidé de créer ces deux modèles et de comparer leur capacité prédictive. 
+```{r, echo=F}
+model_glm <- glm.nb(velos ~ . + jour_travail * horaire + centre_temperature2 * horaire, train_glm)
+summary(model_glm)
+```
+On remarque que tous les coefficients sont significatifs et que l'algorithme converge après 1 itération. De plus, la Null deviance (12788.4) > Residual deviance (1497.4), alors on préfère ce modèle que le modèle réduit à l'intercept. 
+
+### Détection des outliers pour le modèle régression binomiale négative 
+
+#### Regression outliers
+```{r, echo=F}
+influenceIndexPlot(model_glm,vars="cook")
+```
+
+Aucune observation n'a un Cook's distance < 1. 
+
+On peut également étudier les résidus de Pearson pour voir les observations dont le modèle n'arrive pas bien à prédire (seuil >2).
+
+```{r, echo=F}
+residual_glm <- rstandard(model_glm, type = "pearson")
+
+#outliers avec un seuil de ±2 
+outliers <- which(abs(residual_glm) > 2 )
+
+# Afficher les observations concernées
+data_out <- data_final[outliers, ]
+head(data_out, n=10, caption= "Extrait des données des outliers")
+
+```
+
+Le modèle échoue à bien prédire ces 69 observations. Doit-on les enlever de notre étude ? Pour répondre à cette question, on va comparer le MSE du modèle avec et sans ces observations.
+
+```{r, echo=F}
+data_clean_glm <- data_final[-outliers, ] #données sans les outliers 
+```
+```{r, echo=F}
+
+set.seed(123)
+split_glm_clean<- rsample::initial_split(data_clean_glm, prop=0.8)
+train_glm_clean<- rsample::training(split_glm_clean)
+test_glm_clean <- rsample::testing(split_glm_clean)
+
+```
+
+```{r, echo=F}
+model_glm_clean<- glm.nb(velos ~ . + jour_travail * horaire + centre_temperature2 * horaire, train_glm_clean)
+```
+
+```{r, echo=F}
+predict_glm <- predict(model_glm,  newdata = test_glm, type = "response")
+MSE_glm <- mean((test_glm$velos - predict_glm)^2)
+```
+```{r, echo=F}
+predict_glm_clean <- predict(model_glm_clean,  newdata = test_glm_clean, type = "response")
+MSE_glm_clean <- mean((test_glm_clean$velos - predict_glm_clean)^2)
+```
+```{r, echo=F}
+MSE <- data.frame(
+  Modèle = c("Modèle avec outliers", "Modèle sans outliers"),
+  MSE = c(MSE_glm, MSE_glm_clean)
+)
+print(MSE)
+
+```
+
+Le MSE du modèle avec les outliers étant plus faible, donc il est préférable de garder les valeurs atypiques.  On garde donc le modèle initial.
+
+## Modèle linéaire 
+
+```{r, echo=F}
+data_final_lm <- data_final |> mutate(velos_sqrt = sqrt(velos))
+data_final_lm<- data_final_lm |> dplyr::select(-velos)
+
+head(data_final_lm, n = 10) |> knitr::kable(caption = "Extrait des données avec les transformations de variables")
+```
+```{r, echo=F}
+set.seed(123)
+split_lm <- rsample::initial_split(data_final_lm, prop=0.8)
+train_lm <- rsample::training(split_lm)
+test_lm  <- rsample::testing(split_lm)
+```
+```{r, echo=F}
+model_lm <- lm(velos_sqrt ~ . + jour_travail * horaire + centre_temperature2 * horaire, data = train_lm)
+```
+
+### Détection des outliers pour le modèle régression linéaire
+```{r, echo=F}
+library(car)
+influenceIndexPlot(model_lm,vars="Studentized")
+```
+
+Les observations 169 et 473 sont des regression outliers.
+
+
+#### Valeurs aberrantes avec une forte influence sur elles-mêmes 
+```{r, echo=F}
+influenceIndexPlot(model_lm,vars="hat")
+```
+
+Aucune des observations n'a un grand impact sur sa propre estimation. 
+
+#### Valeurs aberrantes avec une forte influence sur le modèle
+
+```{r, echo=F}
+influenceIndexPlot(model_lm,vars="cook")
+```
+
+```{r, echo=F}
+outlierTest(model_lm)
+```
+
+L'observation 169 a une Bonferroni p-value < 5 \%, alors elle est un outlier. De même pour l'observation 473.
+
+On va encore une fois comparer le MSE des 2 modèles avec et sans les outliers. 
+
+```{r, echo=F}
+data_lm_clean <- data_final_lm[-c(473,169), ]
+
+set.seed(123)
+split_lm_clean <- rsample::initial_split(data_lm_clean, prop=0.8)
+train_lm_clean<- rsample::training(split_lm_clean)
+test_lm_clean  <- rsample::testing(split_lm_clean)
+```
+```{r, echo=F}
+model_lm_clean <- lm(velos_sqrt ~ . + jour_travail * horaire + centre_temperature2 * horaire, data = train_lm_clean)
+```
+```{r, echo=F}
+R2_aj <- data.frame(
+  Modèle = c("Modèle avec outliers", "Modèle sans outliers"),
+  R2_ajuste = c(summary(model_lm)$adj.r.squared, summary(model_lm_clean)$adj.r.squared)
+)
+print(R2_aj)
+
+```
+Il n'y a pas trop de différence de $R^2$ ajusté.
+```{r, echo=F}
+
+predict_lm_clean <- predict(model_lm_clean, newdata = test_lm_clean)
+MSE_lm_clean <- mean(((test_lm_clean$velos_sqrt)^2 - (predict_lm_clean)^2)^2)
+
+predict_lm <- predict(model_lm, newdata = test_lm)
+MSE_lm <- mean(((test_lm$velos_sqrt)^2 - (predict_lm)^2)^2)
+```
+```{r, echo=F}
+MSE <- data.frame(
+  Modèle = c("Modèle avec outliers", "Modèle sans outliers"),
+  MSE = c(MSE_lm, MSE_lm_clean))
+print(MSE)
+```
+
+Le MSE du modèle avec les outliers étant inférieur au MSE du modèle sans outliers, alors il est préférable de garder le modèle avec outliers.
+
+## Choix du modèle final
+
+Pour choisir notre modèle final, on va comparer le MSE du modèle de régression linéaire à celui du modèle de régression binomiale négative. 
+
+```{r, echo=F}
+MSE <- data.frame(
+  Modèle = c("Modèle linéaire", "Modèle binomiale négative"),
+  MSE = c(MSE_lm, MSE_glm)
+)
+print(MSE)
+```
+
+On choisit donc le modèle de régression binomiale négative car son MSE est petit.
+
+# Selection de modèles
+
+Nous commençons par un test de Type I, qui évalue la signification de chaque prédicteur dans le modèle de manière séquentielle. 
+
+```{r, echo=F, warning=F}
+anova(model_glm)
+```
+
+On voit ici que la variable *jour_travail* n'est pas significative mais que son interaction  avec *horaire* l'est. Donc on peut enlever cette variable mais garder son interaction avec *horaire*.
+
+# Ecriture du modèle final  
+
+```{r, echo= F}
+model_final <- glm.nb(velos~. -jour_travail+ jour_travail : horaire + centre_temperature2 : horaire , data=data_final )
+summary(model_final)
+
+```
+## Interprétation de l'equation du model final 
+
+Le modèle final est une régression binomiale négative avec lien logarithmique. L’équation prédite est donnée par :
+
+$$
+\log(\mathbb{E}[\text{velos}]) = \beta_0 + \sum_{\text{mois}} \beta_{\text{mois}} \cdot 1\{\text{mois}\} + \sum_{\text{météo}} \beta_{\text{météo}} \cdot 1\{\text{météo}\} + \sum_{\text{horaire}} \beta_{\text{horaire}} \cdot 1\{\text{horaire}\} + \beta_{\text{centre_vent}} \cdot \text{centre_vent} + \beta_{\text{centre_temperature2}} \cdot \text{centre_temperature2} + \sum_{\text{interactions}} \gamma_{\text{interactions}} \cdot (\text{variables\ d'interaction})
+$$
+
+où :
+
+- $\beta_0$ est l'intercept ($\beta_0 = 4.7946$),
+
+- Les coefficients des mois, météo, et plages horaires capturent leurs effets respectifs,
+
+- $\text{centre_vent}$ et $\text{centre_temperature2}$ sont des variables *vent* et *temperature2* apres centrage,
+
+- $\text{interactions}$ inclut les termes $\text{jour_travail : horaire}$ et $\text{centre_temperature2 : horaire}$.
+
+## Interprétation des coefficients estimés
+
+### Coefficients principaux
+
+- **Intercept ($\beta_0 = 4.7946$) :**
+$$
+\mathbb{E}[\text{velos}|X] = e^{4.7946} \approx 121.87
+$$
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Mois : Janvier,
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+
+- **Effets des mois :**
+  
+  - Février ($\beta_{\text{Février}} = 0.2120$) :
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.2120} \approx 1.236
+$$
+soit une augmentation de 23,6 % par rapport à janvier.
+ - Mars ($\beta_{\text{Mars}} = 0.3383$) :
+
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.3383} \approx 1.403 
+$$
+soit une augmentation de 40.3  % par rapport à Janvier.
+
+ - Avril ($\beta_{\text{Avril}} = 0.6318$) :
+ 
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+  
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.6318} \approx 1.88
+$$
+soit une augmentation de 88 % par rapport à Janvier.
+
+  - Mai ($\beta_{\text{Mai}} = 0.8631$) :
+  
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+  
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.8631} \approx 2.37
+$$
+soit une augmentation de 137 % par rapport à Janvier.
+
+  - Juin ($\beta_{\text{Juin}} = 0.8289281$) :
+  
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+  
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.8289281} \approx 2.29
+$$
+soit une augmentation de 129 % par rapport à Janvier. 
+
+  - Juillet ($\beta_{\text{Juillet}} = 0.7221$) :
+  
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+  
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.7221} \approx 2.05
+$$
+soit une augmentation de 105 % par rapport à Janvier.
+  - Août ($\beta_{\text{Août}} = 0.8289281$) :
+
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.7639} \approx 2.14
+$$
+soit une augmentation de 114 % par rapport à Janvier.
+
+  - Septembre ($\beta_{\text{Septembre}} = 0.8605$) :
+  
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.8605} \approx 2.36
+$$
+soit une augmentation de 136 % par rapport à Janvier.
+
+  - Octobre ($\beta_{\text{Octobre}} = 0.8703$) :
+  
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.8703} \approx 2.39
+$$
+soit une augmentation de 149 % par rapport à Janviier
+
+ - Novembre ($\beta_{\text{Novembre}} = 0.7867$) :
+ 
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.7867} \approx 2.19
+$$
+soit une augmentation de 119 % par rapport à Janvier.
+
+  - Décembre ($\beta_{\text{Décembre}} = 0.6641$):
+  
+Le nombre moyen de vélos prédits dans les conditions de référence :
+  - Météo : Claire,
+  - Horaire : 24h-07h,
+  - Température et vent centrés sur leur moyenne.
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.6641} \approx 1.94
+$$
+soit une augmentation de 94 % par rapport à Janvier.
+
+Donc le modele prédit une augmentation significative du nombre de vélos loués dans les mois de Mai, Juin, Juillet, Août, Septembre, Octobre et Novembre par rapport à Janvier. Cela est cohérent avec le schéma saisonnier observé dans l'analyse exploratoire.
+
+- **Effets de la météo :**
+
+Dans cette partie les interprétations des coefficients se feront dans les conditions de référence :
+
+Mois : Janvier,
+Horaire : 24h-07h,
+Température et vent centrés sur leur moyenne.
+
+  - Nuageux/Brumeux ($\beta_{\text{Nuageux/Brumeux}} = -0.0889$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.0889} \approx 0.915
+$$
+soit une diminution de 8,5 % par rapport à une météo claire.
+
+  - Pluie/Neige ($\beta_{\text{Pluie/Neige}} = -0.6124$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.6124} \approx 0.542
+$$
+soit une diminution de 45,8 % par rapport à une météo claire.
+
+Donc, le modèle prédit une forte diminution du nombre de vélos loués en cas de pluie ou de neige, ce qui est cohérent avec les observations de l'analyse exploratoire.
+
+- **Effets des plages horaires :**
+
+Dans cette section les interprétations des coefficients se font dans les conditions de référence :
+
+Mois : Janvier,
+Météo : Claire,
+Température et vent centrés sur leur moyenne.
+
+  - 07h-11h ($\beta_{\text{07h-11h}} = 0.6039$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.6039} \approx 1.829
+$$
+soit une augmentation de 82,9 % par rapport à l’horaire 24h-07h.
+  - 11h-15h ($\beta_{\text{11h-15h}} = 1.5110$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{1.5110} \approx 4.53
+$$
+soit une multiplication par 4,53 par rapport à l’horaire 24h-07h.
+
+ - 15h-19h ($\beta_{\text{15h-19h}} = 1.4506$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{1.4506} \approx 4.27
+$$
+soit une multiplication par 4.27 par rapport à l’horaire 24h-07h.
+
+  - 19h-24h ($\beta_{\text{19h-24h}} = 0.9281$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.9281} \approx 2.53
+$$
+soit une multiplication par 2.53 par rapport à l’horaire 24h-07h.
+
+Alors, le modèle prédit une augmentation significative du nombre de vélos entre 11h et 19h, ce qui est cohérent avec les observations de l'analyse exploratoire.
+
+- **Effets du vent ($\beta_{\text{centre_vent}} = -0.0024$) :**
+
+Dans cette partie, les interpréations se font dans les conditions de référence :
+
+Mois : Janvier,
+Météo : Claire,
+Horaire : 24h-07h,
+Température centré sur sa moyenne.
+  
+Chaque unité supplémentaire de vent réduit légèrement le nombre moyen de vélos :
+  
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.0024} \approx 0.998
+$$
+soit une diminution marginale.
+
+- **Effets de la température ($\beta_{\text{centre_temperature2}} = 0.0237$) :**
+
+Le nombre moyen de vélos prédits dans les conditions de référence :
+
+Mois : Janvier,
+Météo : Claire,
+Horaire : 24h-07h,
+Vent centré sur sa moyenne.
+
+Chaque unité supplémentaire de température centrée augmente légèrement le nombre moyen de vélos :
+
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.0237} \approx 1.024
+$$
+soit une augmentation de 2,4 %.
+
+### Effets d’interaction
+
+- **Jour de travail et horaires :**
+
+Dans cette partie, nous allons interpréter les coefficients les conditions de référence :
+
+Mois : Janvier,
+Météo : Claire,
+Horaire : 24h-07h,
+Température et vent centrés sur leur moyenne.
+
+  - Horaire 24h-07h, jours de travail ($\gamma_{\text{24h-07h:jour_travail}} = -0.3770$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.3770} \approx 0.686
+$$
+soit une diminution de 31,4 % les jours de travail par rapport aux jours non travaillés. Cela a du sens car les gens n’ont pas l’énergie de jouer le soir quand ils travaillent.
+
+  - Horaire 07h-11h, jours de travail ($\gamma_{\text{07h-11h:jour_travail}} = 0.7605$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.7605} \approx 2.139
+$$
+soit une augmentation de 113,9 % par rapport aux jours non travaillés. C'est logique car les gens se rendent au travail entre 7h et 11h. 
+
+  - Horaire 11h-15h, jours de travail ($\gamma_{\text{11h-15h:jour_travail}} = -0.6381$) :
+  
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.6381} \approx    0.528
+$$
+soit une diminution de 47.2 % par rapport aux jours non travaillé. C'est logique car les gens sont au travail entre 11h et 15h.
+
+  - Horaire 15h-19h, jours de travail ($\gamma_{\text{15h-19h:jour_travail}} = 0.0870$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.0870} \approx   1.09
+$$
+soit une augmentation de 9 % par rapport aux jours non travaillé. C'est logique car certaines gens finissent le travail entre 15h et 19h. 
+
+  - Horaire 19h-24h, jours de travail ($\gamma_{\text{19h-24h:jour_travail}} = 0.2543$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.2543} \approx   1.29
+$$
+soit une augmentation de 29 % par rapport aux jours non travaillé. C'est logique car certains gens finissent le travail entre 19h et 24h. 
+
+Donc, le modèle montre des comportements spécifiques selon les jours de travail et les horaires.
+
+- **Température et horaires :**
+  - 07h-11h ($\gamma_{\text{07h-11h:centre_temperature2}} = -0.0139$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.0139} \approx 0.986
+$$
+soit une diminution de 1,4 % par unité de température par rapport à l’horaire 24h-07h. Le temperture n'a pas un grand impact sur le nombre de vélos loués entre 7h et 11h.
+
+  - 11h-15h ($\gamma_{\text{11h-15h:centre_temperature2}} = 0.0132$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{0.0132} \approx   1.013
+$$
+soit une augmentation de 1,3 % par unité de température par rapport à l’horaire 24h-07h. Le temperture a un petit impact sur le nombre de vélos loués entre 11h et 15h.
+
+  - 15h-19h ($\gamma_{\text{15h-19h:centre_temperature2}} = -0.0076$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.0076} \approx    0.992
+$$
+soit une diminution de 0,8 % par unité de température par rapport à l’horaire 24h-07h. Le température n'a pas un grand impact sur le nombre de vélos loués entre 15h et 19h.
+
+  - 19h-24h ($\gamma_{\text{19h-24h:centre_temperature2}} = -0.0007$) :
+$$
+\mathbb{E}[\text{velos}|X] = e^{-0.0007} \approx    0.999
+$$
+soit une diminution de 0,1 % par unité de température par rapport à l’horaire 24h-07h. Le température n'a pas un grand impact sur le nombre de vélos loués entre 19h et 24h.
+
+Donc les interactions entre la température et les horaires n'ont pas un grand impact sur le nombre de vélos loués. 
+
+En conclusion, le modèle montre que :
+1. Les mois entre mai et novembre augmentent significativement l’utilisation des vélos.
+2. La météo défavorable (pluie/neige) réduit fortement le nombre de vélos empruntés.
+3. Les plages horaires, notamment 11h-15h, 15-19h, sont associées à des hausses importantes d’utilisation.
+4. Les interactions entre la température et les horaires n'ont pas un grand impact sur le nombre de vélos loués alors que les interactions entre horaires et jours de travail ont un impact significatif en fonction des horaires et des jours de travail.
+
+
+# Evaluation du modèle final
+### Analyse des résidus 
+```{r, echo=F, warning=F}
+summary(residuals(model_glm, type="response"))
+```
+Le modèle est globalement bien ajusté, mais les résidus révèlent quelques points importants. La médiane des résidus (0.2491) montre un très léger décalage positif, tandis que la moyenne négative (-1.3589) indique une tendance générale à sous-estimer légèrement les valeurs observées. La présence de résidus extrêmes et une certaine dispersion suggèrent également des observations atypiques qui pourraient nécessiter une analyse complémentaire pour vérifier leur impact. 
+
+### Une alternative à Residuals vs Fitted plot
+```{r, echo=F, warning=F}
+arm::binnedplot(fitted(model_final), residuals(model_final, type = "response"),col.int = "blue",col.pts = 2)
+```
+
+Le graphique produit par binnedplot affiche également un intervalle de prédiction à 95 % (indiqué par des lignes bleues) pour les résidus moyens. Si le modèle binomiale négative est adéquat, environ 95 % des résidus devraient se situer à l'intérieur de cet intervalle, ce qui est effectivement le cas ici.
+
+
+### MSE du modèle final 
+
+```{r, echo=F}
+predict_glm2 <- predict(model_final,  newdata = test_glm, type = "response")
+MSE_glm2 <- mean((test_glm$velos - predict_glm2)^2)
+```
+Le MSE est de 23783.93.
+```{r, echo=F, warning=F}
+pred_train <- augment(model_final, newdata = test_glm, type.predict = "response")
+print(pred_train, n=15)
+```
+L'image montre que les prédictions du modèle (colonne: .fitted) sont globalement alignées avec les valeurs observées (colonne: velos), mais il existe certaines différences notables, comme dans le cas de la ligne 1 (prédit = 514,45 contre observé = 340). Le modèle fonctionne mieux dans certaines conditions (par exemple, ligne 4) que dans d'autres, ce qui suggère que des améliorations pourraient être apportées pour mieux capturer certaines variations.
+
+### Graphe superposé des valeurs réelles et prédites
+
+
+```{r, echo=F}
+data_hist <- data.frame(
+  values = c(pred_train$.fitted, pred_train$velos),
+  type = rep(c("Prédictions", "Valeurs réelles"), 
+             c(length(pred_train$.fitted), length(pred_train$velos)))
+)
+
+ggplot(data_hist, aes(x = values, fill = type)) +
+  geom_histogram(position = "identity", color = "black", alpha = 0.5, bins = 30) +
+  scale_fill_manual(values = c("dodgerblue", "red")) +
+  labs(y = "Count", x = "Values", title = "Comparaison des valeurs réelles et prédites") +
+  scale_y_continuous(expand = expansion(c(0, 0.05))) +
+  scale_x_continuous(breaks = pretty_breaks(n = 10)) +
+  theme_bw(base_size = 14) +
+  theme(legend.position = "top")
+
+```
+
+#### Limites du modèle
+ 
+Les distributions des prédictions (bleu) et des valeurs réelles (rouge) semblent globalement alignées, ce qui indique que le modèle capture les tendances générales des données.
+ 
+Pour les très petites valeurs (0-200), les barres rouges sont nettement plus hautes que les bleues. Cela indique que le modèle a tendance à sous-estimer la fréquence des petites valeurs.
+ 
+ 
+Aux extrémités (au-delà de 1800), on observe une faible représentation des prédictions par rapport aux valeurs réelles, ce qui suggère que le modèle a du mal à capturer les valeurs extrêmes.
+
+
+
